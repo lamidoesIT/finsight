@@ -11,145 +11,103 @@ license: mit
 
 # FINSIGHT — Bank Statement Analyser
 
-Upload a South African bank statement (PDF) and FINSIGHT extracts every transaction,
-sorts each one into a spending category with a trained XGBoost model, and explains the
-result in plain English — plus budget-vs-actual comparison and savings tracking.
+Upload a South African bank statement as a PDF. FINSIGHT reads every transaction,
+sorts each one into a spending category using a trained XGBoost classifier, and
+explains the result in plain English — then compares it against a budget you set.
 
-**Live demo:** _(paste your Hugging Face Space URL here once deployed)_
+**[Live demo →](https://huggingface.co/spaces/lamidoesIT/finsight)**
 
-> Demo only. Use the sample statements in `examples/`, not real personal statements.
+> Demo only. The app ships with sample statements; please don't upload a real
+> personal bank statement to a public demo.
+
+![FINSIGHT results](docs/screenshot-home.png)
 
 ---
+
+## Why this exists
+
+Most people can't answer "where did my money actually go last month?" without
+sitting down with a statement and a calculator. Bank apps categorise some
+transactions, but South African merchant descriptors are messy — `VISA DDA PUR
+449215 FNB EWALLET MAT 1036 * GP` is not obviously a transfer.
+
+FINSIGHT does that categorisation automatically and, importantly, **tells you how
+confident it is**, so a wrong guess can be spotted rather than quietly believed.
 
 ## What it does
 
-| Stage | How |
+| Stage | Approach |
 |---|---|
-| Read the PDF | `pdfplumber` text extraction with a running-balance sanity check (`pdf_extraction.py`) |
-| Feature engineering | Date parts, inferred purchase date, time-of-day, online flag, transaction type (`build_features`) |
-| Categorise | TF-IDF on description + scaled numeric features → XGBoost multi-class classifier |
-| Confidence | Top-1 probability, plus the runner-up category so low-confidence rows can be reviewed |
-| Explain | Plain-language insights, donut / daily-stacked / confidence charts (Plotly) |
-| Budget | Per-category budget, planned-vs-spent comparison, savings vs goal |
-| Accounts | SQLite users with PBKDF2-hashed passwords, saved budgets, analysis history (`users.py`) |
+| Read the PDF | `pdfplumber` text extraction, with each amount cross-checked against the statement's own running balance |
+| Feature engineering | Date parts, inferred original purchase date, days-to-process, time of day, online-merchant flag, derived transaction type |
+| Categorise | TF-IDF over the description, stacked with scaled numeric features, into a multi-class XGBoost model |
+| Confidence | Top-1 probability plus the runner-up category; anything under 50% is flagged for review |
+| Explain | Plain-language insights and Plotly charts — category donut, daily stacked spend, confidence by category |
+| Budget | Per-category plan, planned-vs-actual, what overspending cost, progress to a savings goal |
+| Accounts | SQLite with PBKDF2-hashed passwords, saved budgets, analysis history |
 
-**Stack:** Python · Gradio · XGBoost · scikit-learn · pandas · Plotly · pdfplumber · SQLite
+**Stack:** Python · XGBoost · scikit-learn · pandas · Gradio · Plotly · pdfplumber · DuckDB · SQLite
 
----
-
-## Run it on your own machine
-
-You need **Python 3.10–3.12** installed.
-
-### 1. Open a terminal in this folder
-
-```bash
-cd finsight-app
-```
-
-### 2. Create a virtual environment
-
-A virtual environment keeps this project's packages separate from the rest of your computer.
-
-```bash
-python -m venv .venv
-```
-
-Activate it:
-
-```bash
-# macOS / Linux
-source .venv/bin/activate
-
-# Windows (PowerShell)
-.venv\Scripts\Activate.ps1
-```
-
-Your prompt should now start with `(.venv)`.
-
-### 3. Install the packages
-
-```bash
-pip install -r requirements.txt
-```
-
-This takes a few minutes the first time.
-
-### 4. Start the app
-
-```bash
-python app.py
-```
-
-You'll see a line like `Running on local URL: http://127.0.0.1:7860`.
-Open that address in your browser.
-
-### 5. Use it
-
-1. Create an account (any username/password — it's stored locally in `finsight_users.db`).
-2. Upload one of the PDFs in `examples/`, or pick one from the samples row.
-3. Press **"Show me where my money went."**
-4. Set a budget on the **Budget** tab, then press **Compare**.
-
-To stop the app, press `Ctrl+C` in the terminal.
+<table>
+  <tr>
+    <td><img src="docs/screenshot-breakdown.png" alt="Spending breakdown"></td>
+    <td><img src="docs/screenshot-dark.png" alt="Dark mode"></td>
+  </tr>
+</table>
 
 ---
 
-## Batch ETL pipeline (statements → DuckDB warehouse)
+## Two ways in
 
-The web app handles one statement at a time, interactively. The pipeline does the
-other half: point it at a folder of statement PDFs and it loads them all into a
-queryable warehouse.
+**The web app** (`app.py`) handles one statement at a time, interactively.
+
+**The batch pipeline** (`pipeline/`) handles a folder of them, loading the results
+into a DuckDB warehouse you can query with SQL:
 
 ```bash
-python -m pipeline.run                    # process data/statements_inbox
-python -m pipeline.run --dry-run          # parse + check, write nothing
-python -m pipeline.run --full-refresh     # reprocess statements already loaded
-python -m pipeline.run --input some/dir --db warehouse/other.duckdb
+python -m pipeline.run                 # process data/statements_inbox
+python -m pipeline.run --dry-run       # parse and validate, write nothing
+python -m pipeline.run --full-refresh  # reprocess what's already loaded
 ```
 
-30 sample statements ship in `data/statements_inbox/`, so it runs out of the box.
+30 sample statements are included, so it runs out of the box: 1 210 transactions
+across 30 statements in about five seconds.
 
-### Layers
+### Pipeline architecture
 
 ```
 data/statements_inbox/*.pdf
         │
-        ▼   extract.py        reuses pdf_extraction.py
+        ▼   extract.py       reuses pdf_extraction.py
    BRONZE   raw rows, untouched, with lineage (file, sha256, page, line_no)
-        │                     → warehouse/bronze/*.parquet
-        ▼   transform.py      reuses finsight_core.py (same model as the app)
-   SILVER   typed + cleaned; inflow/outflow split; category + confidence
-        │                     → warehouse/silver/*.parquet
-        ▼   quality.py        8 checks; fatal ones abort before the warehouse is touched
-    GOLD    star schema + marts in DuckDB
-                              → warehouse/finsight.duckdb
+        │                    → warehouse/bronze/*.parquet
+        ▼   transform.py     reuses finsight_core.py — the same model as the app
+   SILVER   typed and cleaned; inflow/outflow split; category + confidence
+        │                    → warehouse/silver/*.parquet
+        ▼   quality.py       8 checks; fatal ones abort before the warehouse is touched
+    GOLD    star schema + marts
+                             → warehouse/finsight.duckdb
 ```
 
-The model and feature engineering live in **`finsight_core.py`**, imported by both
-`app.py` and the pipeline. There is exactly one implementation of "how a transaction
-becomes a category", so the app and the warehouse can never disagree.
+The model and feature engineering live in `finsight_core.py`, imported by both the
+app and the pipeline. There is one implementation of "how a transaction becomes a
+category", so the interactive app and the warehouse can't drift apart.
 
-### Warehouse schema
+### Warehouse
 
 | Table | Grain |
 |---|---|
-| `fct_transaction` | one row per transaction line (the fact table) |
+| `fct_transaction` | one row per transaction line |
 | `dim_date` | one row per calendar day, with weekday/weekend flags |
-| `dim_category` | one row per spending group, `is_spending` flag |
-| `dim_statement` | one row per statement file, with its period and row count |
+| `dim_category` | one row per spending group |
+| `dim_statement` | one row per statement file, with period and row count |
 | `run_log` | one row per pipeline run: counts, status, warnings |
 
-Views for querying and dashboards:
-
-`mart_spend_by_category` · `mart_monthly_spend` · `mart_statement_summary`
-`mart_review_queue` · `mart_weekday_spend`
+Plus views for reporting: `mart_spend_by_category`, `mart_monthly_spend`,
+`mart_statement_summary`, `mart_review_queue`, `mart_weekday_spend`.
 
 ```sql
--- where the money goes
-SELECT * FROM mart_spend_by_category;
-
--- transactions the model was unsure about, worst first
+-- transactions the model was least sure about
 SELECT * FROM mart_review_queue LIMIT 20;
 
 -- month-on-month movement in one category
@@ -159,145 +117,60 @@ WHERE category = 'Groceries'
 ORDER BY year, month;
 ```
 
-Query it from the CLI with `duckdb warehouse/finsight.duckdb`, from Python with
-`duckdb.connect(...)`, or point Power BI / Tableau at the file via the DuckDB
-ODBC driver.
+### Engineering decisions
 
-### Design decisions worth knowing
-
-- **Idempotent.** Statements are keyed by a SHA-256 of their contents, and rows by a
-  deterministic `txn_id` (`statement_id:page:line_no`). Re-running the same inbox
-  skips what is already loaded; `--full-refresh` replaces per statement rather than
-  appending. Running the pipeline three times leaves 1 210 rows, not 3 630.
-- **Bad files do not sink the batch.** An unreadable PDF is logged and reported;
-  the other statements still load. Both deliberately broken test PDFs in the original
-  repo are handled this way.
-- **Income is not a spending category.** Only outflows go through the model;
-  inflows are labelled `Income` with a null confidence and excluded from every
-  spending mart.
-- **Low confidence is surfaced, not hidden.** Rows under 50% confidence are flagged
-  `needs_review` and collected in `mart_review_queue` instead of being silently
-  trusted or dropped. On the 30 sample statements that is ~7% of transactions.
+- **Idempotent loads.** Statements are keyed by a SHA-256 of their contents, rows by
+  a deterministic `txn_id` of `statement_id:page:line_no`. Running the pipeline three
+  times leaves 1 210 rows, not 3 630.
+- **A bad file doesn't sink the batch.** An unreadable PDF is logged with a reason;
+  the rest still load.
+- **Income is not a spending category.** Only outflows go through the model; inflows
+  are labelled `Income` and excluded from every spending mart.
+- **Low confidence is surfaced, not hidden.** Rows under 50% go to
+  `mart_review_queue` rather than being silently trusted. On the sample data that's
+  about 7% of transactions.
 - **Quality gate before the load.** Duplicate keys, null dates, non-positive amounts
-  and uncategorised rows abort the run. Balance-check failures, low confidence and
-  future dates warn and are recorded in `run_log`.
-
-### Tests
+  and uncategorised rows abort the run. Balance-check failures and low confidence
+  warn and are recorded in `run_log`.
 
 ```bash
-pytest -q        # 14 tests covering transform, quality gates and idempotency
+pytest -q   # 14 tests covering the transform rules, quality gates and idempotency
 ```
 
 ---
 
-## Deploy it (so it lives on the internet)
+## Running it locally
 
-This is a **Python app with a trained model**, so it needs a server that runs Python.
-GitHub Pages only serves static files, so it **cannot** host the app itself — but it can
-host a landing page that embeds the running app. That's what `portfolio/index.html` does.
-
-### Option A — Hugging Face Spaces (free, recommended)
-
-1. Create a free account at <https://huggingface.co>.
-2. Click your avatar → **New Space**.
-   - **Space name:** `finsight`
-   - **SDK:** Gradio
-   - **Hardware:** CPU basic (free)
-   - **Visibility:** Public
-3. On the Space page, open the **Files** tab → **Add file** → **Upload files**, and upload:
-   `app.py`, `pdf_extraction.py`, `users.py`, `requirements.txt`,
-   `finsight_model.joblib`, `logo.png`, `favicon.png`, `README.md`, and the `examples/` folder.
-4. The Space builds itself (a few minutes). Your app is then live at
-   `https://huggingface.co/spaces/<your-username>/finsight`.
-5. Optional: Space **Settings → Persistent storage** keeps user accounts across restarts.
-   Without it, the accounts database resets whenever the Space sleeps.
-
-### Option B — Render / Railway / Fly.io
-
-Any host that runs a Python web process works. Start command:
+Requires Python 3.10+ (tested on 3.13).
 
 ```bash
-python app.py
+git clone https://github.com/lamidoesIT/finsight.git
+cd finsight
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python app.py                    # http://127.0.0.1:7860
 ```
 
-Gradio reads the `PORT` environment variable on most of these hosts; if yours needs it
-explicit, change the last line of `app.py` to:
+Set `FINSIGHT_SHARE=1` to expose a temporary public link via Gradio.
 
-```python
-demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)), **_launch_kwargs)
-```
+<img src="docs/screenshot-mobile.png" alt="Mobile view" width="280">
 
 ---
-
-## Put it on your GitHub and portfolio
-
-### 1. Push the code to GitHub
-
-```bash
-git init
-git add .
-git commit -m "FINSIGHT: bank statement analyser"
-git branch -M main
-git remote add origin https://github.com/<your-username>/finsight.git
-git push -u origin main
-```
-
-### 2. Publish the landing page
-
-`portfolio/index.html` is a standalone page that describes the project and embeds the
-live app in an iframe.
-
-1. Open `portfolio/index.html` and replace `YOUR-USERNAME/finsight` with your real Space path
-   (there is a single `SPACE_URL` line near the top of the file).
-2. Copy `portfolio/index.html` into your portfolio website repo as e.g. `projects/finsight.html`,
-   **or** publish it on its own with GitHub Pages: repo **Settings → Pages → Source: main / root**.
-
-### 3. Or just embed the app in a page you already have
-
-```html
-<iframe
-  src="https://<your-username>-finsight.hf.space"
-  title="FINSIGHT"
-  width="100%"
-  height="900"
-  style="border:1px solid #E2EBF0;border-radius:18px"
-  allow="clipboard-write"
-></iframe>
-```
-
----
-
-## Files
-
-```
-app.py                  Gradio UI: charts, insights, budget logic, accounts
-finsight_core.py        Model + feature engineering (shared by the app and the pipeline)
-pdf_extraction.py       PDF → transactions dataframe
-users.py                SQLite accounts, PBKDF2 passwords, saved budgets, history
-finsight_model.joblib   Trained bundle: tfidf + imputer + scaler + XGBoost + label encoder
-
-pipeline/
-  config.py             Paths and thresholds
-  extract.py            Bronze: PDFs → raw rows with lineage
-  transform.py          Silver: typed, cleaned, categorised
-  quality.py            Data-quality gate (fatal vs warning)
-  load.py               Gold: star schema + marts in DuckDB
-  run.py                Orchestration and CLI
-
-tests/test_pipeline.py  Pytest suite for the pipeline
-data/statements_inbox/  30 sample statements the pipeline reads
-warehouse/              Generated: DuckDB file + bronze/silver parquet (gitignored)
-examples/               Sample statements for the web app
-portfolio/index.html    Static landing page that embeds the live app
-requirements.txt        Python dependencies
-```
 
 ## Credits
 
-Original FINSIGHT project and trained model by the Eduvos capstone group
-(Hugging Face Space: `JenniferAnnKok/FINSIGHT`). This repository is a UI refresh and
-deployment packaging of that work — the extraction, model and analysis logic are unchanged.
+FINSIGHT began as an Eduvos BSc IT capstone project. The trained model, PDF
+extraction and analysis logic are the group's work — the original Space is
+[JenniferAnnKok/FINSIGHT](https://huggingface.co/spaces/JenniferAnnKok/FINSIGHT).
+
+This repository is my work on top of that: the interface redesign (including dark
+mode and mobile layout), the shared `finsight_core` refactor, the batch ETL
+pipeline and DuckDB warehouse, the test suite, and deployment packaging.
+
+Built by **Lami Langa** — [GitHub](https://github.com/lamidoesIT) ·
+[LinkedIn](https://www.linkedin.com/in/lami-langa-a063272b5)
 
 ## License
 
-MIT — see the original project for the model's terms.
+MIT

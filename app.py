@@ -1519,4 +1519,15 @@ if __name__ == "__main__":
     if FAVICON.exists():
         _launch_kwargs["favicon_path"] = str(FAVICON)
 
-    demo.launch(share=True, **_launch_kwargs)
+    # On a host like Render the platform picks the port and expects the app to
+    # listen on all interfaces. Locally neither is set, so it stays on
+    # 127.0.0.1:7860 and is reachable only from this machine.
+    port = os.environ.get("PORT")
+    if port:
+        _launch_kwargs["server_name"] = "0.0.0.0"
+        _launch_kwargs["server_port"] = int(port)
+
+    # A public share link is opt-in, so a normal local run stays private:
+    #     Windows  : $env:FINSIGHT_SHARE = "1"; python app.py
+    #     mac/Linux: FINSIGHT_SHARE=1 python app.py
+    demo.launch(share=os.environ.get("FINSIGHT_SHARE") == "1", **_launch_kwargs)

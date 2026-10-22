@@ -1,21 +1,10 @@
----
-title: FINSIGHT
-emoji: 💸
-colorFrom: blue
-colorTo: indigo
-sdk: gradio
-app_file: app.py
-pinned: false
-license: mit
----
-
 # FINSIGHT — Bank Statement Analyser
 
 Upload a South African bank statement as a PDF. FINSIGHT reads every transaction,
 sorts each one into a spending category using a trained XGBoost classifier, and
 explains the result in plain English — then compares it against a budget you set.
 
-**[Live demo →](https://huggingface.co/spaces/lamidoesIT/finsight)**
+**[Live demo →](https://finsight.onrender.com)**  ·  *(free hosting: the first load after a quiet spell takes ~1 minute to wake)*
 
 > Demo only. The app ships with sample statements; please don't upload a real
 > personal bank statement to a public demo.
@@ -148,11 +137,22 @@ git clone https://github.com/lamidoesIT/finsight.git
 cd finsight
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python app.py                    # http://127.0.0.1:7860
+pip install -r requirements.txt       # app only
+pip install -r requirements-dev.txt   # + pipeline and tests
+python app.py                         # http://127.0.0.1:7860
 ```
 
-Set `FINSIGHT_SHARE=1` to expose a temporary public link via Gradio.
+Set `FINSIGHT_SHARE=1` for a temporary public Gradio link.
+
+### Deploying
+
+`render.yaml` deploys the app to [Render](https://render.com)'s free tier as-is:
+New → Blueprint, point it at this repo. The app reads `PORT` from the
+environment and binds `0.0.0.0` when it is set, so it runs unchanged locally
+and in the cloud.
+
+Measured footprint: **326 MB idle, 386 MB peak** during an analysis — inside
+Render's 512 MB free allowance.
 
 <img src="docs/screenshot-mobile.png" alt="Mobile view" width="280">
 

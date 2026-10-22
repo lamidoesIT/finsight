@@ -1,0 +1,5 @@
+# Everything in the app, plus the batch pipeline and the test suite.
+-r requirements.txt
+duckdb
+pyarrow
+pytest

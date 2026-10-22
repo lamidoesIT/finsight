@@ -1,0 +1,14 @@
+# Render blueprint: deploys the FINSIGHT web app on the free tier.
+# New > Blueprint in the Render dashboard picks this up automatically.
+services:
+  - type: web
+    name: finsight
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: GRADIO_ANALYTICS_ENABLED
+        value: "False"

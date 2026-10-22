@@ -1,4 +1,4 @@
-# --- web app ---
+# Runtime for the web app. This is what a host (e.g. Render) installs.
 gradio
 plotly
 pdfplumber
@@ -8,11 +8,3 @@ xgboost==3.2.0
 pandas
 numpy
 scipy
-matplotlib
-
-# --- batch ETL pipeline ---
-duckdb
-pyarrow
-
-# --- tests (optional) ---
-pytest

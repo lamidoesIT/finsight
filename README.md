@@ -4,7 +4,7 @@ Upload a South African bank statement as a PDF. FINSIGHT reads every transaction
 sorts each one into a spending category using a trained XGBoost classifier, and
 explains the result in plain English — then compares it against a budget you set.
 
-**[Live demo →](https://finsight.onrender.com)**  ·  *(free hosting: the first load after a quiet spell takes ~1 minute to wake)*
+**[Live demo →](https://finsight-evkz.onrender.com)**  ·  *(free hosting: the first load after a quiet spell takes ~1 minute to wake)*
 
 > Demo only. The app ships with sample statements; please don't upload a real
 > personal bank statement to a public demo.

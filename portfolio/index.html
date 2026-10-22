@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FINSIGHT — Bank Statement Analyser</title>
+<meta name="description" content="FINSIGHT reads a bank statement PDF, categorises every transaction with a trained XGBoost model, and explains your spending in plain English.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ====== EDIT THIS ONE LINE: your Hugging Face Space ====== */
+  /* Space page: https://huggingface.co/spaces/YOUR-USERNAME/finsight   */
+  /* Embed host: https://YOUR-USERNAME-finsight.hf.space                */
+
+  :root{
+    --navy:#0F2A43; --teal:#5EC8D8; --teal-dark:#148C9E;
+    --ink:#16263A; --muted:#5C6B7E; --border:#E2EBF0;
+    --canvas:#F6F9FB; --surface:#FFFFFF;
+    --shadow-sm:0 1px 2px rgba(15,42,67,.06);
+    --shadow-md:0 6px 20px -8px rgba(15,42,67,.16),0 1px 3px rgba(15,42,67,.05);
+    --shadow-lg:0 20px 44px -18px rgba(15,42,67,.24),0 2px 6px rgba(15,42,67,.05);
+    --maxw:1080px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --navy:#E8F4F8; --ink:#E6EDF3; --muted:#9AAABC; --border:#24364A;
+      --canvas:#0C1824; --surface:#122234;
+      --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+      --shadow-md:0 6px 20px -8px rgba(0,0,0,.55),0 1px 3px rgba(0,0,0,.4);
+      --shadow-lg:0 20px 44px -18px rgba(0,0,0,.6),0 2px 6px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --navy:#E8F4F8; --ink:#E6EDF3; --muted:#9AAABC; --border:#24364A;
+    --canvas:#0C1824; --surface:#122234;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--canvas); color:var(--ink);
+    font-family:"Plus Jakarta Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 16px}
+  a{color:var(--teal-dark)}
+
+  /* ---------- hero ---------- */
+  header{
+    position:relative; overflow:hidden; padding:64px 0 52px;
+    background:
+      radial-gradient(760px 320px at 15% -10%, rgba(94,200,216,.22) 0%, rgba(94,200,216,0) 65%),
+      radial-gradient(640px 300px at 85% 0%, rgba(99,132,216,.16) 0%, rgba(99,132,216,0) 62%);
+  }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px; background:var(--surface);
+    border:1px solid var(--border); color:var(--teal-dark); border-radius:999px;
+    padding:6px 14px; font-size:.74rem; font-weight:700; letter-spacing:.09em;
+    text-transform:uppercase; box-shadow:var(--shadow-sm);
+  }
+  h1{
+    font-size:clamp(2.1rem,5.4vw,3.4rem); line-height:1.08; letter-spacing:-.035em;
+    margin:20px 0 0; color:var(--navy); font-weight:800;
+  }
+  h1 .accent{
+    background:linear-gradient(135deg,var(--teal-dark),var(--teal));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .lede{font-size:clamp(1.02rem,2vw,1.2rem); color:var(--muted); max-width:62ch; margin:18px 0 0}
+  .cta-row{display:flex; gap:12px; flex-wrap:wrap; margin-top:28px}
+  .btn{
+    display:inline-flex; align-items:center; gap:9px; border-radius:13px;
+    padding:13px 22px; font-weight:700; font-size:.97rem; text-decoration:none;
+    border:1px solid transparent; transition:transform .13s ease, box-shadow .13s ease;
+  }
+  .btn:hover{transform:translateY(-2px)}
+  .btn-primary{background:linear-gradient(135deg,#0F2A43,#1D4E6E); color:#fff;
+               box-shadow:0 10px 22px -10px rgba(15,42,67,.6)}
+  .btn-ghost{background:var(--surface); border-color:var(--border); color:var(--navy);
+             box-shadow:var(--shadow-sm)}
+
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:30px}
+  .chip{
+    background:var(--surface); border:1px solid var(--border); color:var(--navy);
+    border-radius:999px; padding:7px 14px; font-size:.82rem; font-weight:600;
+    box-shadow:var(--shadow-sm);
+  }
+
+  /* ---------- sections ---------- */
+  section{padding:46px 0}
+  h2{font-size:1.5rem; letter-spacing:-.02em; color:var(--navy); margin:0 0 6px; font-weight:750}
+  .sub{color:var(--muted); margin:0 0 26px}
+
+  .grid{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(245px,1fr))}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:18px;
+    padding:22px; box-shadow:var(--shadow-md);
+    transition:transform .14s ease, box-shadow .14s ease;
+  }
+  .card:hover{transform:translateY(-3px); box-shadow:var(--shadow-lg)}
+  .card .ico{
+    width:42px; height:42px; border-radius:13px; display:flex; align-items:center;
+    justify-content:center; background:rgba(94,200,216,.14);
+    border:1px solid rgba(94,200,216,.3); margin-bottom:13px; color:var(--teal-dark);
+  }
+  .card h3{margin:0 0 6px; font-size:1.04rem; color:var(--navy); font-weight:720}
+  .card p{margin:0; color:var(--muted); font-size:.92rem; line-height:1.6}
+
+  /* ---------- pipeline ---------- */
+  ol.pipeline{list-style:none; counter-reset:step; padding:0; margin:0; display:grid; gap:12px}
+  ol.pipeline li{
+    counter-increment:step; display:flex; gap:16px; align-items:flex-start;
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:17px 20px; box-shadow:var(--shadow-sm);
+  }
+  ol.pipeline li::before{
+    content:counter(step); flex:none; width:30px; height:30px; border-radius:9px;
+    background:linear-gradient(135deg,#0F2A43,#1D4E6E); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:.86rem; font-weight:750; margin-top:2px;
+  }
+  ol.pipeline strong{color:var(--navy); display:block; font-size:1rem}
+  ol.pipeline span{color:var(--muted); font-size:.92rem}
+  code{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:.86em;
+    background:rgba(94,200,216,.13); padding:2px 6px; border-radius:6px; color:var(--teal-dark);
+  }
+
+  /* ---------- live app ---------- */
+  .app-shell{
+    background:var(--surface); border:1px solid var(--border); border-radius:20px;
+    box-shadow:var(--shadow-lg); overflow:hidden;
+  }
+  .app-bar{
+    display:flex; align-items:center; gap:8px; padding:11px 16px;
+    border-bottom:1px solid var(--border); background:rgba(94,200,216,.06);
+  }
+  .app-bar .dot{width:10px; height:10px; border-radius:50%; background:#D7E2EA}
+  .app-bar .label{
+    margin-left:8px; font-size:.8rem; color:var(--muted); font-weight:600;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  iframe{display:block; width:100%; height:900px; border:0; background:var(--surface)}
+  .note{
+    margin-top:14px; font-size:.86rem; color:var(--muted);
+    background:var(--surface); border:1px dashed var(--border);
+    border-radius:12px; padding:12px 16px;
+  }
+
+  footer{
+    padding:32px 0 44px; border-top:1px solid var(--border); margin-top:26px;
+    color:var(--muted); font-size:.88rem;
+  }
+  .foot-row{display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center}
+  .foot-row a{margin-left:16px; font-weight:650; text-decoration:none}
+
+  @media (max-width:640px){
+    header{padding:44px 0 36px}
+    iframe{height:760px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <span class="eyebrow">Data Science · Portfolio Project</span>
+    <h1>FINSIGHT — see where your<br><span class="accent">money actually went</span></h1>
+    <p class="lede">
+      Upload a bank statement PDF. FINSIGHT extracts every transaction, sorts each one into a
+      spending category with a trained XGBoost classifier, and explains the result in plain
+      English — then compares it against a budget you set.
+    </p>
+
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#live">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+        Try the live app
+      </a>
+      <a class="btn btn-ghost" id="repo-link" href="https://github.com/LamidoesIT" target="_blank" rel="noopener">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.4.5-.7 1.1-.8 1.7-.1.6-.1 1.3 0 1.9v3.9"/><path d="M9 18c-4.5 2-5-2-7-2"/></svg>
+        Source on GitHub
+      </a>
+    </div>
+
+    <div class="chips">
+      <span class="chip">Python</span>
+      <span class="chip">XGBoost</span>
+      <span class="chip">scikit-learn</span>
+      <span class="chip">Gradio</span>
+      <span class="chip">Plotly</span>
+      <span class="chip">pdfplumber</span>
+      <span class="chip">SQLite</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>What it does</h2>
+    <p class="sub">Four things, end to end — no manual tagging anywhere in the flow.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="ico"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+        <h3>Reads the statement</h3>
+        <p>Text extraction over the PDF, then each amount is checked against the statement's own running balance so parsing errors surface instead of hiding.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <h3>Categorises every purchase</h3>
+        <p>TF-IDF over the merchant description plus engineered numeric features feed a multi-class XGBoost model covering groceries, transport, utilities and more.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></div>
+        <h3>Shows its confidence</h3>
+        <p>Every row carries the model's probability and the runner-up category, so low-confidence predictions are flagged for review rather than presented as fact.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>
+        <h3>Compares against a budget</h3>
+        <p>Set a per-category plan and FINSIGHT reports planned vs actual, what overspending cost, and progress toward a savings goal.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>How the pipeline works</h2>
+    <p class="sub">PDF in, categorised spending out.</p>
+    <ol class="pipeline">
+      <li><div><strong>Extraction</strong><span><code>pdfplumber</code> pulls date, description, amount and balance per page; a balance check validates each parsed amount.</span></div></li>
+      <li><div><strong>Feature engineering</strong><span>Statement date parts, an inferred original purchase date, days-to-process, time of day, an online-merchant flag, and a derived transaction type (card, ATM, debit order, transfer).</span></div></li>
+      <li><div><strong>Vectorise</strong><span>TF-IDF on description + transaction type, horizontally stacked with imputed and scaled numeric features into a single sparse matrix.</span></div></li>
+      <li><div><strong>Classify</strong><span>XGBoost returns a probability per category; the top two are kept so confidence and the runner-up can both be shown.</span></div></li>
+      <li><div><strong>Explain</strong><span>Aggregations become plain-language insights and Plotly charts: category donut, daily stacked spend, confidence by category, planned vs actual.</span></div></li>
+    </ol>
+  </div>
+</section>
+
+<section id="live">
+  <div class="wrap">
+    <h2>Try it live</h2>
+    <p class="sub">Create a demo account, then analyse one of the built-in sample statements.</p>
+
+    <div class="app-shell">
+      <div class="app-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="label" id="app-url">finsight · live demo</span>
+      </div>
+      <iframe
+        id="app-frame"
+        src="https://YOUR-USERNAME-finsight.hf.space"
+        title="FINSIGHT live demo"
+        loading="lazy"
+        allow="clipboard-write"
+        referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </div>
+
+    <p class="note">
+      <strong>Demo only.</strong> Please use the sample statements provided in the app, not a real
+      personal bank statement. The free host sleeps when idle, so the first load can take up to a
+      minute to wake up.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-row">
+    <div>Built by <strong style="color:var(--navy)">Lami Langa</strong> · original FINSIGHT model from the Eduvos capstone group</div>
+    <div>
+      <a href="https://github.com/LamidoesIT" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://www.linkedin.com/in/lami-langa-a063272b5" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Shows the real Space host in the fake browser bar once the iframe src is set.
+  (function () {
+    try {
+      var src = document.getElementById('app-frame').getAttribute('src');
+      var host = new URL(src).host;
+      if (host.indexOf('YOUR-USERNAME') === -1) {
+        document.getElementById('app-url').textContent = host;
+      }
+    } catch (e) { /* leave the default label */ }
+  })();
+</script>
+
+</body>
+</html>

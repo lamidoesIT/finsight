@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+finsight_users.db
+.DS_Store
+.gradio/
+warehouse/
+*.duckdb
+.pytest_cache/

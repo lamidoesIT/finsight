@@ -1,0 +1,18 @@
+# --- web app ---
+gradio
+plotly
+pdfplumber
+joblib
+scikit-learn==1.8.0
+xgboost==3.2.0
+pandas
+numpy
+scipy
+matplotlib
+
+# --- batch ETL pipeline ---
+duckdb
+pyarrow
+
+# --- tests (optional) ---
+pytest
